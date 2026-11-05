@@ -1,0 +1,108 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>YDCL | AEO Fabric Library</title><style>
+:root{font-family:Inter,system-ui,sans-serif;color:#172c42;background:#f2f5f7}*{box-sizing:border-box}body{margin:0}header{background:#112e47;color:white;padding:32px max(5vw,20px)}header small{letter-spacing:3px;color:#a9cadb}h1{font-size:32px;margin:12px 0}header p{color:#c7d8e4}main{max-width:1300px;margin:auto;padding:28px 20px}.bar,.stats{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.stats article{background:white;border:1px solid #dbe4ea;padding:18px;flex:1;min-width:150px;border-radius:10px}.stats b{display:block;font-size:28px}.stats span,small{color:#627488}button,.file{border:1px solid #ccd8e0;background:white;color:#17354f;border-radius:6px;padding:10px 14px;cursor:pointer;font:inherit}button.primary{background:#196a76;color:white;border-color:#196a76}button:hover,.file:hover{filter:brightness(.95)}section{background:white;border:1px solid #dbe4ea;border-radius:10px;margin-top:22px;padding:22px}h2{margin-top:0;font-size:21px}input,select{padding:11px;border:1px solid #c8d5df;border-radius:6px;font:inherit;max-width:100%}#search{flex:1;min-width:180px}.table{overflow:auto}table{border-collapse:collapse;width:100%;margin-top:16px}th,td{padding:13px;text-align:left;border-bottom:1px solid #e5ebef;vertical-align:top}th{font-size:12px;text-transform:uppercase;color:#6b7b8b;letter-spacing:1px}td button{padding:5px 9px;margin:2px;font-size:13px}.empty{text-align:center;padding:35px;color:#6b7b8b}.notice{font-size:14px;color:#526579;line-height:1.6;margin:20px 0}dialog{border:0;border-radius:12px;width:520px;max-width:95vw;padding:26px;box-shadow:0 20px 90px #102d4750}dialog::backdrop{background:#102d4777}label.field{display:block;margin:16px 0}label.field span{display:block;font-size:14px;margin-bottom:6px}label.field input,label.field select{width:100%}.preview{background:#edf4f6;padding:14px;line-height:1.8;border-radius:6px}.actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}#status{min-height:22px;color:#196a76}nav{display:flex;gap:8px;margin:24px 0 16px}nav button[aria-pressed=true]{background:#112e47;color:white}footer{font-size:12px;color:#7a8a98;margin-top:28px}@media(max-width:600px){header{padding:25px 20px}h1{font-size:26px}section{padding:14px}th,td{padding:10px}}
+.column-sort{padding:3px 6px;margin-left:3px;font-size:14px;line-height:1.2;vertical-align:middle;border-color:transparent;background:transparent;color:#627488}th[aria-sort="ascending"] .column-sort,th[aria-sort="descending"] .column-sort{background:#e2eff1;color:#196a76;border-color:#bdd6dc}.column-sort:focus-visible{outline:2px solid #196a76;outline-offset:2px}th{white-space:nowrap}</style></head><body><header><small>YDCL / WASHING R&D</small><h1>AEO Fabric Library</h1><p>One fabric record. Every connected style.</p></header><main><div class="stats"><article><b id="fabricCount">0</b><span>Fabrics in library</span></article><article><b id="menCount">0</b><span>Men’s style links</span></article><article><b id="womenCount">0</b><span>Women’s style links</span></article></div><p class="notice">Data is saved in this browser only. Export a JSON backup regularly and before moving devices. Each fabric belongs to Men’s or Women’s. Older fabrics without style links show Unassigned until edited. Fabric prices are in USD per yard; changes apply to all linked styles.</p><div class="bar"><button class="primary" id="addFabric">+ Add fabric</button><button id="addStyle">+ Link style</button><button id="backup">Export backup</button><label class="file">Restore backup<input type="file" id="restore" accept=".json" hidden></label><button id="csv">Export CSV</button></div><p id="status" role="status"></p><section><div class="bar"><input id="search" placeholder="Search fabric, content or style…" aria-label="Search"><select id="division" aria-label="Filter division"><option value="">All divisions</option><option>Mens</option><option>Womens</option></select></div><nav><button id="fabricTab" aria-pressed="true">Fabric master</button><button id="styleTab" aria-pressed="false">Style lookup</button></nav><div class="table"><table><thead id="head"></thead><tbody id="rows"></tbody></table></div></section><footer>YDCL · AEO Mens & Womens · Fabric reference workspace</footer></main>
+<dialog id="fabricDialog"><form id="fabricForm"><h2 id="fabricTitle">Add fabric</h2><input name="id" type="hidden"><label class="field"><span>Division</span><select name="division" required><option value="">Select Men’s or Women’s…</option><option value="Mens">Men’s</option><option value="Womens">Women’s</option></select></label><label class="field"><span>Fabric name / mill reference</span><input name="name" required maxlength="160" placeholder="Enter unique fabric name"></label><label class="field"><span>Fabric content</span><input name="content" required maxlength="500" placeholder="e.g. 99% Cotton, 1% Elastane"></label><label class="field"><span>Fabric price (USD / yd)</span><input name="price" type="number" required min="0" step="0.0001" placeholder="0.00"></label><p class="notice">Use a unique name for each fabric specification. Editing this record updates all linked styles, including their division.</p><div class="actions"><button type="button" data-close>Cancel</button><button class="primary">Save fabric</button></div></form></dialog>
+<dialog id="styleDialog"><form id="styleForm"><h2>Link a style to fabric</h2><input name="id" type="hidden"><label class="field"><span>Style number</span><input name="number" required maxlength="120" placeholder="Enter style number"></label><label class="field"><span>Fabric name — select to auto-fill details</span><select name="fabricName" required></select></label><div id="autoFill" class="preview">Select an existing fabric to see its content and price.</div><div class="actions"><button type="button" data-close>Cancel</button><button class="primary">Save style link</button></div></form></dialog><script>
+'use strict';
+const KEY='ydcl-aeo-fabrics-v1';
+const norm=s=>s.trim().toLocaleLowerCase();
+// IDs identify records only; they are not authentication tokens.
+function recordId(){
+ if(globalThis.crypto && typeof globalThis.crypto.randomUUID==='function')return globalThis.crypto.randomUUID();
+ if(globalThis.crypto && typeof globalThis.crypto.getRandomValues==='function'){
+  const bytes=new Uint8Array(16);globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+ }
+ return Date.now().toString(36)+'-'+Math.random().toString(36).slice(2)+'-'+Math.random().toString(36).slice(2);
+}
+
+function validate(d){
+ if(!d||d.version!==2||!Array.isArray(d.fabrics)||!Array.isArray(d.styles))throw Error('Not a valid version 2 backup.');
+ const ids=new Set(),names=new Set(),links=new Set(),styleIds=new Set();
+ for(const f of d.fabrics){if(!f||typeof f.id!=='string'||!f.id||ids.has(f.id)||typeof f.name!=='string'||!f.name.trim()||f.name.length>160||typeof f.content!=='string'||!f.content.trim()||f.content.length>500||typeof f.price!=='number'||!Number.isFinite(f.price)||f.price<0||!['Mens','Womens','Unassigned'].includes(f.division)||names.has(f.division+'|'+norm(f.name)))throw Error('Invalid or duplicate fabric record.');ids.add(f.id);names.add(f.division+'|'+norm(f.name));}
+ for(const s of d.styles){const k=JSON.stringify([s.division,norm(typeof s.number==='string'?s.number:''),s.fabricId]);if(typeof s.id!=='string'||!s.id||styleIds.has(s.id)||!['Mens','Womens'].includes(s.division)||typeof s.number!=='string'||!s.number.trim()||s.number.length>120||!ids.has(s.fabricId)||d.fabrics.find(f=>f.id===s.fabricId)?.division!==s.division||links.has(k))throw Error('Invalid, duplicate or unlinked style record.');styleIds.add(s.id);links.add(k);}
+ return d;
+}
+function migrate(data){
+ if(data.version!==1)return validate(data);
+ const next={version:2,fabrics:[],styles:[]};
+ for(const f of data.fabrics){
+  const linked=data.styles.filter(s=>s.fabricId===f.id);
+  const divisions=[...new Set(linked.map(s=>s.division))];
+  if(!divisions.length)divisions.push('Unassigned');
+  divisions.forEach((division,i)=>{
+   const id=i===0?f.id:recordId();next.fabrics.push({...f,id,division});
+   linked.filter(s=>s.division===division).forEach(s=>next.styles.push({...s,fabricId:id}));
+  });
+ }
+ return validate(next);
+}
+let db={version:2,fabrics:[],styles:[]};let storageBroken=false;
+try{const saved=localStorage.getItem(KEY);if(saved)db=migrate(JSON.parse(saved));}catch(e){storageBroken=true;}
+const $=s=>document.querySelector(s), money=p=>'$'+p.toFixed(4).replace(/0{1,2}$/,'');
+function status(s){$('#status').textContent=s;}
+function commit(next){validate(next);try{localStorage.setItem(KEY,JSON.stringify(next));}catch(e){throw Error('Could not save. Browser storage may be full or unavailable. Export a backup before closing.');}db=next;render();}
+function change(fn){try{const next=JSON.parse(JSON.stringify(db));fn(next);commit(next);status('Saved in this browser.');return true;}catch(e){alert(e.message);return false;}}
+let tab='fabric';
+let sortField='name',sortDescending=false;
+const naturalOrder=new Intl.Collator(undefined,{numeric:true,sensitivity:'base'});
+function compareValues(a,b,field,descending){
+ const result=field==='price'?Number(a)-Number(b):naturalOrder.compare(String(a),String(b));
+ return descending?-result:result;
+}
+function sortingControls(){
+ const available=tab==='fabric'?['division','name','content','price','linked']:['division','style','name','content','price'];
+ if(!available.includes(sortField))sortField='name';
+}
+function sortHeading(th,label,field){
+ th.append(document.createTextNode(label+' '));
+ if(!field)return;
+ const active=sortField===field;
+ th.setAttribute('aria-sort',active?(sortDescending?'descending':'ascending'):'none');
+ const button=document.createElement('button');
+ button.type='button';button.className='column-sort';
+ button.textContent=active?(sortDescending?'↓':'↑'):'↕';
+ const nextDescending=active?!sortDescending:false;
+ button.setAttribute('aria-label','Sort '+label+' '+(nextDescending?'descending':'ascending'));
+ button.title='Sort '+label+' '+(nextDescending?'descending':'ascending');
+ button.onclick=()=>{sortDescending=nextDescending;sortField=field;render();};
+ th.append(button);
+}
+function sortVisibleRows(){
+ const columns=tab==='fabric'?{division:0,name:1,content:2,price:3,linked:4}:{division:0,style:1,name:2,content:3,price:4};
+ const value=(row,field)=>{const text=row.cells[columns[field]].textContent;return field==='price'?Number(text.replace('$','')):text;};
+ const rows=Array.from($('#rows').children);
+ rows.sort((a,b)=>compareValues(value(a,sortField),value(b,sortField),sortField,sortDescending)||naturalOrder.compare(value(a,'name'),value(b,'name'))||naturalOrder.compare(value(a,'division'),value(b,'division')));
+ $('#rows').append(...rows);
+}
+
+function cell(row,text){const td=document.createElement('td');td.textContent=text;row.append(td);return td;}
+function action(td,label,fn){const b=document.createElement('button');b.textContent=label;b.onclick=fn;td.append(b);}
+function render(){
+ sortingControls();
+ $('#fabricCount').textContent=db.fabrics.length;$('#menCount').textContent=db.styles.filter(s=>s.division==='Mens').length;$('#womenCount').textContent=db.styles.filter(s=>s.division==='Womens').length;
+ $('#fabricTab').setAttribute('aria-pressed',tab==='fabric');$('#styleTab').setAttribute('aria-pressed',tab==='style');
+ $('#head').replaceChildren();const tr=document.createElement('tr');for(const name of(tab==='fabric'?['Division','Fabric name','Fabric content','USD / yd','Linked styles','Actions']:['Division','Style number','Fabric name','Fabric content','USD / yd','Actions'])){const th=document.createElement('th');const fields=tab==='fabric'?{'Division':'division','Fabric name':'name','Fabric content':'content','USD / yd':'price','Linked styles':'linked'}:{'Division':'division','Style number':'style','Fabric name':'name','Fabric content':'content','USD / yd':'price'};sortHeading(th,name,fields[name]);tr.append(th);}$('#head').append(tr);$('#rows').replaceChildren();
+ const query=norm($('#search').value),division=$('#division').value;
+ for(const f of [...db.fabrics].sort((a,b)=>a.name.localeCompare(b.name))){const styles=db.styles.filter(s=>s.fabricId===f.id);const match=norm([f.name,f.content,...styles.map(s=>s.number)].join(' ')).includes(query);
+ if(tab==='fabric'){if(!match||(division&&f.division!==division))continue;const row=document.createElement('tr');cell(row,f.division);cell(row,f.name);cell(row,f.content);cell(row,money(f.price));cell(row,styles.map(s=>`${s.division} · ${s.number}`).join(', ')||'No styles linked');const td=cell(row,'');action(td,'Edit',()=>openFabric(f));action(td,'Delete',()=>{if(styles.length)return alert('Remove the linked styles before deleting this fabric.');if(confirm('Delete fabric '+f.name+'?'))change(d=>d.fabrics=d.fabrics.filter(x=>x.id!==f.id));});$('#rows').append(row);
+ }else for(const s of styles){if(division&&s.division!==division)continue;if(!norm([s.number,s.division,f.name,f.content].join(' ')).includes(query))continue;const row=document.createElement('tr');[s.division,s.number,f.name,f.content,money(f.price)].forEach(t=>cell(row,t));const td=cell(row,'');action(td,'Edit',()=>openStyle(s));action(td,'Unlink',()=>{if(confirm('Unlink style '+s.number+'?'))change(d=>d.styles=d.styles.filter(x=>x.id!==s.id));});$('#rows').append(row);}}
+ if($('#rows').children.length)sortVisibleRows();
+ if(!$('#rows').children.length){const row=document.createElement('tr');const td=cell(row,db.fabrics.length?'No matching records.':'Your library is ready. Add your first fabric, then link a style.');td.colSpan=6;td.className='empty';$('#rows').append(row);}
+}
+function openFabric(f){const form=$('#fabricForm');form.reset();for(const key of ['id','name','content','price','division'])form.elements[key].value=f?(f[key]==='Unassigned'?'':f[key]):'';$('#fabricTitle').textContent=f?'Edit fabric':'Add fabric';$('#fabricDialog').showModal();}
+function lookup(){return db.fabrics.find(f=>f.id===$('#styleForm').elements.fabricName.value);}
+function autoFill(){const f=lookup();$('#autoFill').textContent=f?`Division: ${f.division} · Content: ${f.content} · Price: ${money(f.price)} / yd`:'Select an existing fabric. Add it to the fabric master first if it is new.';}
+function openStyle(s){if(!db.fabrics.length)return alert('Add a fabric to the fabric master first.');const form=$('#styleForm');form.reset();form.elements.id.value=s?.id||'';form.elements.number.value=s?.number||'';const select=form.elements.fabricName;select.replaceChildren(new Option('Select fabric…',''));for(const f of db.fabrics.filter(f=>f.division!=='Unassigned')){select.add(new Option(f.division+' · '+f.name,f.id));}select.value=s?s.fabricId:'';autoFill();$('#styleDialog').showModal();}
+$('#fabricForm').onsubmit=e=>{e.preventDefault();const form=e.target, id=form.elements.id.value||recordId(),name=form.elements.name.value.trim(),content=form.elements.content.value.trim(),price=Number(form.elements.price.value),division=form.elements.division.value;if(change(d=>{if(d.fabrics.some(f=>f.id!==id&&f.division===division&&norm(f.name)===norm(name)))throw Error('This fabric name already exists. Edit the existing record or use a distinct mill/reference name.');d.styles.filter(s=>s.fabricId===id).forEach(s=>s.division=division);const f={id,name,content,price,division},i=d.fabrics.findIndex(x=>x.id===id);if(i<0)d.fabrics.push(f);else d.fabrics[i]=f;}))$('#fabricDialog').close();};
+$('#styleForm').onsubmit=e=>{e.preventDefault();const form=e.target,f=lookup();if(!f)return alert('Select an existing fabric name to automatically match its content and price.');const s={id:form.elements.id.value||recordId(),division:f.division,number:form.elements.number.value.trim(),fabricId:f.id};if(change(d=>{d.styles=d.styles.filter(x=>x.id!==s.id);d.styles.push(s);}))$('#styleDialog').close();};
+$('#styleForm').elements.fabricName.onchange=autoFill;
+for(const b of document.querySelectorAll('[data-close]'))b.onclick=()=>b.closest('dialog').close();
+$('#addFabric').onclick=()=>openFabric();$('#addStyle').onclick=()=>openStyle();$('#fabricTab').onclick=()=>{tab='fabric';render();};$('#styleTab').onclick=()=>{tab='style';render();};$('#search').oninput=render;$('#division').onchange=render;
+function download(text,name,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+$('#backup').onclick=()=>download(JSON.stringify({...db,exportedAt:new Date().toISOString()},null,2),'AEO-Fabric-Backup-'+new Date().toISOString().slice(0,10)+'.json','application/json');
+$('#restore').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>10000000)throw Error('Backup exceeds 10 MB.');const next=migrate(JSON.parse(await file.text()));if(confirm(`Replace this browser’s library with ${next.fabrics.length} fabrics and ${next.styles.length} style links? Export your current backup first if needed.`)){commit(next);status('Backup restored.');}}catch(err){alert('Restore failed: '+err.message);}finally{e.target.value='';}};
+$('#csv').onclick=()=>{const rows=[['Division','Style number','Fabric name','Fabric content','Fabric price (USD/yd)']];for(const f of db.fabrics){const styles=db.styles.filter(s=>s.fabricId===f.id);for(const s of styles.length?styles:[{division:f.division,number:''}])rows.push([s.division,s.number,f.name,f.content,f.price]);}const quote=v=>'"'+String(typeof v==='string'&&/^[=+@\-\t\r]/.test(v)?"'"+v:v).replaceAll('"','""')+'"';download('\uFEFF'+rows.map(r=>r.map(quote).join(',')).join('\r\n'),'AEO-Fabric-Library.csv','text/csv;charset=utf-8');};
+render();if(storageBroken)status('Saved data could not be loaded. Restore a valid backup before entering new records; export is currently of the empty view.');
+
+</script></body></html>
